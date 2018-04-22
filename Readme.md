@@ -1,9 +1,9 @@
 Hi Everyone, 
 
 This is a simple kodi addon I wrote (adapted from the example).
-I am using it as a tool to help me practive my martial arts.
+I am using it as a tool to help me practice my martial arts.
 Basically it scrapes a local directory and creates folders based on the subdirectories in it.
-Then selecting the category (category taken from the folder names) it plays a random video from that fodler.
+Then selecting the category (category taken from the folder names) it plays a random video from that folder.
 
 So for example, I have in the folder, subfolders names "Stetching" "BJJ" and "Sparring"
 
