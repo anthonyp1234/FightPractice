@@ -15,7 +15,6 @@ media_directory = "/media/storage/fight_practice/"
 
 ####
 ##Change this to different directory
-#media_file = "/media/storage/fight_practice/background.jpg"
 media_file = 'special://media/storage/fight_practice/background.jpg'
 
 
