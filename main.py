@@ -2,6 +2,7 @@
  
 import sys
 from urllib import urlencode
+
 from urlparse import parse_qsl
 import xbmcgui
 import xbmcplugin
@@ -10,6 +11,16 @@ import re
 import os
 #from os import listdir
 #from os.path import isfile, join
+
+##Insecure HTTPS requests
+import urllib3
+urllib3.disable_warnings()
+
+
+##Extra imports for getting random vid from youtube playlist
+from bs4 import BeautifulSoup
+import requests
+
 
 media_directory = "/media/storage/fight_practice/"
 
@@ -24,6 +35,30 @@ _url = sys.argv[0]
 _handle = int(sys.argv[1])
 
 
+###method for getting a random youtube vid from playlist
+def getPlaylistVid(url):
+    sourceCode = requests.get(url).text
+    soup = BeautifulSoup(sourceCode, 'html.parser')
+    domain = 'https://www.youtube.com'
+    playlist = []
+    for link in soup.find_all("a", {"dir": "ltr"}):
+        href = link.get('href')
+        if href.startswith('/watch?'):
+            #print(link.string.strip())
+            playlist.append(domain + href)
+            
+    pattern = "(https://www.youtube.com/watch\?v\=.+?)&"
+
+    try:
+        choice = re.search(pattern,random.choice(playlist)).group(1)
+    except:
+        choice = "EMpty"
+        
+    return choice
+
+
+
+
 
 directories = [dir for dir in os.listdir(media_directory) if os.path.isdir(os.path.join(media_directory, dir))]
 ###Create structure of Videos
@@ -32,10 +67,38 @@ for directory in directories:
     VIDEOS[directory] = []
     ##Grab files in the directory
     for file in os.listdir(media_directory + directory):
-        print(media_directory + directory + file)
-        VIDEOS[directory].append({"video": media_directory + directory + "/" + file })
-  
+        if not file.endswith("txt"):
+            #print(media_directory + directory + file)
+            VIDEOS[directory].append({"video": media_directory + directory + "/" + file })
+        else:
+            ##else it's a text file containing youtube uri's, put them into the list instead
+            with open(media_directory + directory + "/" + file) as f:
+                content = f.readlines()
 
+                
+            [VIDEOS[directory].append({"video":x.strip()}) for x in content]   
+            ##[VIDEOS[directory].append(x.strip()) for x in content]  Previously, forgot the dict
+            
+            #dialog = xbmcgui.Dialog()
+            #dialog.notification('Value is:', VIDEOS[directory][-1]["video"], xbmcgui.NOTIFICATION_INFO, 15000)
+            
+            
+
+def get_youtube_url(action, video_url):
+
+    try:
+        videoid = re.search("""v\=(.*)$""",video_url).group(1)
+    except:
+        videoid = ""
+        xbmc.log('Could not find video ID in: {0}'.format(video_url),level=xbmc.LOGERROR)
+        
+        
+    return '{0}?{1}'.format(_url, urlencode({'action': action, 'videoid': videoid}))
+    
+    #string = """plugin://plugin.video.youtube/?action=play_video&videoid={0}""".format(videoid)
+    #string = """plugin://plugin.video.youtube/play/?video_id={0}""".format(videoid)
+
+    
 
 
 def get_url(**kwargs):
@@ -107,14 +170,20 @@ def list_categories():
         # Example: plugin://plugin.video.example/?action=listing&category=Animals
         
         
-        ##REmoved the next
-        #url = get_url(action='listing', category=category)
-        ##Added ANTHONY:
-        url = get_url(action='play', video=VIDEOS[category][random.randint(0,len(VIDEOS[category])-1)]['video'])
-        #dialog = xbmcgui.Dialog()
-        #dialog.notification('Tony DEbug', url, xbmcgui.NOTIFICATION_INFO, 60000)
+        chosen_video = VIDEOS[category][random.randint(0,len(VIDEOS[category])-1)]['video']
         
-        # is_folder = True means that this item opens a sub-list of lower level items.
+        
+        ##Check to see if it's a Youtube playlist, if so select one video out of the playlist
+        
+        if "playlist" in chosen_video:
+            chosen_video = getPlaylistVid(chosen_video)
+        
+        if "youtube" in chosen_video:         
+            url = get_youtube_url(action='playyoutube', video_url=chosen_video)
+            
+        else:
+            url = get_url(action='play', video=chosen_video)
+
         is_folder = False #do not open as a sub level
         # Add our item to the Kodi virtual folder listing.
         
@@ -137,13 +206,30 @@ def play_video(path):
     #dialog = xbmcgui.Dialog()
     #dialog.notification('The path is', path, xbmcgui.NOTIFICATION_INFO, 15000)
     
-    #xbmc.log(path)
     # Create a playable item with a path to play.
     play_item = xbmcgui.ListItem(path=path)
     # Pass the item to the Kodi player.
     #xbmcplugin.setResolvedUrl(_handle, True, listitem=play_item)
 
     xbmc.Player().play(path, play_item)
+
+
+def play_youtube_video(video_id):
+    """
+    Play a video by the provided path.
+
+    :param path: Fully-qualified video URL
+    :type path: str
+    """
+    string = """plugin://plugin.video.youtube/play/?video_id={0}""".format(video_id)
+    
+    xbmc.executebuiltin('PlayMedia({0})'.format(string))
+    
+    #play_item = xbmcgui.ListItem(path=path)
+    #xbmc.Player().play(path, play_item)
+    #pass
+    #xbmc.executebuiltin('PlayMedia({0})'.format(path))
+    
     
     
 def router(paramstring):
@@ -159,15 +245,23 @@ def router(paramstring):
     params = dict(parse_qsl(paramstring))
     # Check the parameters passed to the plugin
     if params:
+
+        
         if params['action'] == 'listing':
             #pass
             # Display the list of videos in a provided category.
             play_video(params['video'])
 
         elif params['action'] == 'play':
-            pass
-            # Play a video from a provided URL.
+        # Play a video from a provided URL.
             play_video(params['video'])
+            
+        elif params['action'] == 'playyoutube':
+            play_youtube_video(params['videoid'])
+            #dialog = xbmcgui.Dialog()
+            #dialog.notification('Youtube_play_video', paramstring, xbmcgui.NOTIFICATION_INFO, 60000)
+            
+
         else:
             # If the provided paramstring does not contain a supported action
             # we raise an exception. This helps to catch coding errors,
